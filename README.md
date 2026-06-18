@@ -142,16 +142,6 @@ Verify the full stack:
 See [docs/demo-checklist.md](docs/demo-checklist.md) for a live demo runbook.
 See [docs/credentials-setup.md](docs/credentials-setup.md) for credential wiring.
 
-## 5-Minute Demo Script
-
-| Step | Action | What they see |
-|------|--------|---------------|
-| 1 | Show `demo/index.html` | Polished inquiry form with preset scenarios |
-| 2 | Click **Technical Support** preset → Submit | n8n classifies intent, AI Agent queries Qdrant |
-| 3 | Open n8n **Executions** | Visual branching + agent tool calls |
-| 4 | Check Gmail inbox | Professional HTML response |
-| 5 | Run SQL query below | Full audit trail in Postgres |
-| 6 | Submit **Billing** preset | Different branch, no RAG agent |
 
 ## Demo SQL Queries
 
