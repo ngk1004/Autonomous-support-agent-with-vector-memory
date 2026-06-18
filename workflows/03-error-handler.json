@@ -1,0 +1,88 @@
+{
+  "name": "03 - Error Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "c3000001-0001-4001-8001-000000000001",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const err = $input.first().json;\nconst execution = err.execution || {};\nconst workflow = err.workflow || {};\n\nreturn [{\n  json: {\n    workflow_name: workflow.name || 'unknown',\n    workflow_id: workflow.id || '',\n    execution_id: execution.id || '',\n    error_message: err.error?.message || err.message || JSON.stringify(err).slice(0, 500),\n    failed_node: err.error?.node?.name || err.lastNodeExecuted || 'unknown',\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "c3000001-0001-4001-8001-000000000002",
+      "name": "Parse Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "support_interactions"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "customer_email": "system@error.local",
+            "message": "={{ $json.error_message }}",
+            "intent": "error",
+            "response_body": "={{ 'Workflow error in ' + $json.failed_node }}",
+            "status": "failed",
+            "error_message": "={{ $json.error_message }}",
+            "subject": "={{ 'Error: ' + $json.workflow_name }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "c3000001-0001-4001-8001-000000000003",
+      "name": "Log Error to Postgres",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [440, 300],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Support Agent Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Error Handler\n\nLink this workflow as the **Error Workflow** in Settings for **02 - Support Agent**.\n\nLogs workflow failures to `support_interactions` with status `failed`.",
+        "height": 200,
+        "width": 360,
+        "color": 5
+      },
+      "id": "c3000001-0001-4001-8001-000000000004",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-40, 120]
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [[{ "node": "Parse Error", "type": "main", "index": 0 }]]
+    },
+    "Parse Error": {
+      "main": [[{ "node": "Log Error to Postgres", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "pinData": {}
+}

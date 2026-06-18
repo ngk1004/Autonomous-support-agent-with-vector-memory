@@ -1,0 +1,201 @@
+volumes:
+  n8n_storage:
+  postgres_storage:
+  ollama_storage:
+  qdrant_storage:
+
+networks:
+  support_net:
+
+x-n8n: &service-n8n
+  image: n8nio/n8n:latest
+  networks: [support_net]
+  environment:
+    - DB_TYPE=postgresdb
+    - DB_POSTGRESDB_HOST=postgres
+    - DB_POSTGRESDB_PORT=5432
+    - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
+    - DB_POSTGRESDB_USER=${POSTGRES_USER}
+    - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
+    - N8N_DIAGNOSTICS_ENABLED=false
+    - N8N_PERSONALIZATION_ENABLED=false
+    - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+    - N8N_USER_MANAGEMENT_JWT_SECRET=${N8N_USER_MANAGEMENT_JWT_SECRET}
+    - OLLAMA_HOST=${OLLAMA_HOST:-ollama:11434}
+    - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-America/New_York}
+    - WEBHOOK_URL=http://localhost:5678/
+    - N8N_RESTRICT_FILE_ACCESS_TO=/data/knowledge-base
+    - WEBHOOK_AUTH_TOKEN=${WEBHOOK_AUTH_TOKEN}
+    - INTENT_CONFIDENCE_THRESHOLD=${INTENT_CONFIDENCE_THRESHOLD:-0.55}
+  env_file:
+    - path: .env
+      required: true
+
+x-ollama: &service-ollama
+  image: ollama/ollama:latest
+  networks: [support_net]
+  restart: unless-stopped
+  volumes:
+    - ollama_storage:/root/.ollama
+
+x-init-ollama: &init-ollama
+  image: ollama/ollama:latest
+  networks: [support_net]
+  volumes:
+    - ollama_storage:/root/.ollama
+  entrypoint: /bin/sh
+  environment:
+    - OLLAMA_HOST=${OLLAMA_HOST:-ollama:11434}
+  command:
+    - "-c"
+    - |
+      echo "Waiting for Ollama API..."
+      for i in $(seq 1 60); do
+        if ollama list >/dev/null 2>&1; then break; fi
+        sleep 2
+      done
+      echo "Pulling llama3.2..."
+      ollama pull llama3.2
+      echo "Pulling nomic-embed-text..."
+      ollama pull nomic-embed-text
+      echo "Models ready."
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    hostname: postgres
+    networks: [support_net]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_storage:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    hostname: qdrant
+    container_name: qdrant
+    networks: [support_net]
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+
+  ollama-cpu:
+    profiles: ["cpu"]
+    container_name: ollama
+    <<: *service-ollama
+    ports:
+      - "11434:11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  ollama-gpu:
+    profiles: ["gpu-nvidia"]
+    container_name: ollama
+    <<: *service-ollama
+    ports:
+      - "11434:11434"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  ollama-gpu-amd:
+    profiles: ["gpu-amd"]
+    container_name: ollama
+    image: ollama/ollama:rocm
+    networks: [support_net]
+    restart: unless-stopped
+    volumes:
+      - ollama_storage:/root/.ollama
+    ports:
+      - "11434:11434"
+    devices:
+      - "/dev/kfd"
+      - "/dev/dri"
+
+  ollama-init-cpu:
+    profiles: ["cpu"]
+    <<: *init-ollama
+    container_name: ollama-init
+    depends_on:
+      - ollama-cpu
+
+  ollama-init-gpu:
+    profiles: ["gpu-nvidia"]
+    <<: *init-ollama
+    container_name: ollama-init
+    depends_on:
+      - ollama-gpu
+
+  ollama-init-gpu-amd:
+    profiles: ["gpu-amd"]
+    <<: *init-ollama
+    container_name: ollama-init
+    image: ollama/ollama:rocm
+    depends_on:
+      - ollama-gpu-amd
+
+  n8n-import:
+    <<: *service-n8n
+    hostname: n8n-import
+    container_name: n8n-import
+    entrypoint: /bin/sh
+    command:
+      - "-c"
+      - |
+        echo "Waiting for postgres..."
+        sleep 3
+        if [ -z "$$(n8n list:workflow --onlyId 2>/dev/null)" ]; then
+          echo "Importing credentials..."
+          n8n import:credentials --separate --input=/demo-data/credentials 2>/dev/null || echo "Credential import skipped (configure manually in UI)"
+          echo "Importing workflows..."
+          n8n import:workflow --separate --input=/demo-data/workflows
+          echo "Import complete."
+        else
+          echo "Workflows already exist, skipping import."
+        fi
+    volumes:
+      - ./workflows:/demo-data/workflows:ro
+      - ./n8n/credentials:/demo-data/credentials:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  n8n:
+    <<: *service-n8n
+    hostname: n8n
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_storage:/home/node/.n8n
+      - ./knowledge-base:/data/knowledge-base:ro
+      - ./workflows:/demo-data/workflows:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      n8n-import:
+        condition: service_completed_successfully

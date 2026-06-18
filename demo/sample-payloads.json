@@ -1,0 +1,14 @@
+{
+  "billing": {
+    "description": "Duplicate charge — routes to Billing branch",
+    "curl": "curl -X POST http://localhost:5678/webhook/support-inquiry \\\n  -H 'Content-Type: application/json' \\\n  -H 'X-Webhook-Token: demo_webhook_token_change_me' \\\n  -d '{\"customer_name\":\"Jane Smith\",\"customer_email\":\"jane.smith@example.com\",\"subject\":\"Duplicate charge\",\"message\":\"I was charged twice for my Pro plan this month. Invoice IDs INV-2025-0612 and INV-2025-0614. Please refund the duplicate.\"}'"
+  },
+  "technical": {
+    "description": "API 401 error — routes to Technical AI Agent + RAG",
+    "curl": "curl -X POST http://localhost:5678/webhook/support-inquiry \\\n  -H 'Content-Type: application/json' \\\n  -H 'X-Webhook-Token: demo_webhook_token_change_me' \\\n  -d '{\"customer_name\":\"Alex Chen\",\"customer_email\":\"alex.chen@devcorp.io\",\"subject\":\"API 401 Unauthorized\",\"message\":\"Every API call returns 401 invalid_api_key. We use Bearer auth with sk_live_ prefix. Help troubleshoot?\"}'"
+  },
+  "feature_request": {
+    "description": "Slack integration — routes to Feature Request branch",
+    "curl": "curl -X POST http://localhost:5678/webhook/support-inquiry \\\n  -H 'Content-Type: application/json' \\\n  -H 'X-Webhook-Token: demo_webhook_token_change_me' \\\n  -d '{\"customer_name\":\"Morgan Lee\",\"customer_email\":\"morgan@startup.co\",\"subject\":\"Slack integration\",\"message\":\"Can you add native Slack integration for deployment notifications? Is it on your roadmap?\"}'"
+  }
+}

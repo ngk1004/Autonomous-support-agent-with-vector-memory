@@ -1,0 +1,634 @@
+{
+  "name": "02 - Support Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "support-inquiry",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "b2000001-0001-4001-8001-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 400],
+      "webhookId": "support-inquiry-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst body = item.body || item;\nconst rawHeaders = item.headers || {};\nconst headers = Object.fromEntries(\n  Object.entries(rawHeaders).map(([k, v]) => [k.toLowerCase(), v])\n);\n\nconst authToken = $env.WEBHOOK_AUTH_TOKEN;\nif (authToken && headers['x-webhook-token'] !== authToken) {\n  return [{ json: { valid: false, error: 'Unauthorized: invalid webhook token', statusCode: 401 } }];\n}\n\nconst customer_email = body.customer_email || body.email;\nconst message = body.message || body.inquiry;\n\nif (!customer_email || !message) {\n  return [{ json: { valid: false, error: 'Missing required fields: customer_email and message', statusCode: 400 } }];\n}\n\nreturn [{\n  json: {\n    valid: true,\n    customer_name: body.customer_name || body.name || 'Customer',\n    customer_email,\n    subject: body.subject || 'Support Inquiry',\n    message,\n    received_at: new Date().toISOString(),\n    _startedAt: Date.now()\n  }\n}];"
+      },
+      "id": "b2000001-0001-4001-8001-000000000002",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "valid-check",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b2000001-0001-4001-8001-000000000003",
+      "name": "Valid Input?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'error', error: $json.error }) }}",
+        "options": {
+          "responseCode": "={{ $json.statusCode || 400 }}"
+        }
+      },
+      "id": "b2000001-0001-4001-8001-000000000004",
+      "name": "Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [660, 560]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Classify this customer support inquiry into exactly ONE intent.\n\nReply with ONLY valid JSON (no markdown fences):\n{\"intent\":\"billing|technical|feature_request|unknown\",\"confidence\":0.95,\"reason\":\"brief reason\"}\n\nSubject: {{ $json.subject }}\nMessage: {{ $json.message }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are an intent classifier for AcmeCloud customer support. Output only JSON."
+            }
+          ]
+        }
+      },
+      "id": "b2000001-0001-4001-8001-000000000005",
+      "name": "Classify Intent",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "model": "llama3.2",
+        "options": {}
+      },
+      "id": "b2000001-0001-4001-8001-000000000006",
+      "name": "Ollama Chat (Intent)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [500, 520],
+      "credentials": {
+        "ollamaApi": {
+          "id": "OLLAMA_CREDENTIAL_ID",
+          "name": "Ollama Local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const normalized = $('Normalize Input').first().json;\nconst llmItem = $input.first().json;\nconst llmOutput = llmItem.text || llmItem.output || llmItem.response || JSON.stringify(llmItem);\n\nlet parsed = { intent: 'unknown', confidence: 0.5, reason: 'default' };\ntry {\n  const cleaned = String(llmOutput).replace(/```json\\n?/gi, '').replace(/```/g, '').trim();\n  const match = cleaned.match(/\\{[\\s\\S]*\\}/);\n  if (match) parsed = JSON.parse(match[0]);\n} catch (e) {\n  const msg = (normalized.message || '').toLowerCase();\n  if (/charge|bill|refund|invoice|payment/.test(msg)) parsed.intent = 'billing';\n  else if (/api|401|login|sso|webhook|deploy|error/.test(msg)) parsed.intent = 'technical';\n  else if (/feature|slack|integration|roadmap|request/.test(msg)) parsed.intent = 'feature_request';\n  parsed.reason = 'keyword_fallback';\n}\n\nconst validIntents = ['billing', 'technical', 'feature_request', 'unknown'];\nif (!validIntents.includes(parsed.intent)) parsed.intent = 'unknown';\n\nconst confidence = Number(parsed.confidence) || 0.5;\nconst threshold = Number($env.INTENT_CONFIDENCE_THRESHOLD || 0.55);\nif (confidence < threshold && parsed.intent !== 'unknown') {\n  parsed.intent = 'unknown';\n  parsed.reason = `low_confidence_${confidence.toFixed(2)}`;\n}\n\nreturn [{\n  json: {\n    ...normalized,\n    intent: parsed.intent,\n    intent_confidence: confidence,\n    intent_reason: parsed.reason || '',\n    _startedAt: normalized._startedAt\n  }\n}];"
+      },
+      "id": "b2000001-0001-4001-8001-000000000007",
+      "name": "Parse Intent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": false },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "billing",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "billing"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": false },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "technical",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "technical"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": false },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "feature_request",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "feature_request"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "b2000001-0001-4001-8001-000000000008",
+      "name": "Route by Intent",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "agent": "toolsAgent",
+        "promptType": "define",
+        "text": "=Customer: {{ $json.customer_name }}\nEmail: {{ $json.customer_email }}\nSubject: {{ $json.subject }}\nMessage: {{ $json.message }}\n\nSearch billing documentation and write a helpful, empathetic support response about refunds, charges, invoices, or payment issues.",
+        "options": {
+          "systemMessage": "You are AcmeCloud billing support. Use search_billing_docs to find accurate billing policies before responding. Never invent refund rules. Be empathetic and professional. Output only the email body text."
+        }
+      },
+      "id": "b2000001-0001-4001-8001-000000000009",
+      "name": "Billing AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [1340, 80]
+    },
+    {
+      "parameters": {
+        "model": "llama3.2",
+        "options": {}
+      },
+      "id": "b2000001-0001-4001-8001-000000000010",
+      "name": "Ollama Chat (Billing)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [1180, 180],
+      "credentials": {
+        "ollamaApi": {
+          "id": "OLLAMA_CREDENTIAL_ID",
+          "name": "Ollama Local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolName": "search_billing_docs",
+        "toolDescription": "Search AcmeCloud billing documentation for refund policies, duplicate charges, payment failures, invoices, subscriptions, and tax information.",
+        "qdrantCollection": {
+          "__rl": true,
+          "mode": "id",
+          "value": "support_kb"
+        },
+        "topK": 4,
+        "options": {}
+      },
+      "id": "b2000001-0001-4001-8001-000000000028",
+      "name": "Qdrant Billing RAG",
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
+      "typeVersion": 1.2,
+      "position": [1500, 80],
+      "credentials": {
+        "qdrantApi": {
+          "id": "QDRANT_CREDENTIAL_ID",
+          "name": "Qdrant Local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "nomic-embed-text",
+        "options": {
+          "dimensions": 768
+        }
+      },
+      "id": "b2000001-0001-4001-8001-000000000029",
+      "name": "Embeddings (Billing)",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [1420, 280],
+      "credentials": {
+        "openAiApi": {
+          "id": "OLLAMA_OPENAI_CREDENTIAL_ID",
+          "name": "Ollama OpenAI Compatible"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "agent": "toolsAgent",
+        "promptType": "define",
+        "text": "=Customer: {{ $json.customer_name }}\nEmail: {{ $json.customer_email }}\nSubject: {{ $json.subject }}\nMessage: {{ $json.message }}\n\nSearch the technical documentation and provide a helpful support response. Cite specific doc topics when relevant.",
+        "options": {
+          "systemMessage": "You are AcmeCloud technical support engineer. Use the search_technical_docs tool to find accurate answers from the knowledge base. Never invent policies or features not in the docs. If unsure, say you will escalate. Be professional and include actionable steps. Output only the email body text."
+        }
+      },
+      "id": "b2000001-0001-4001-8001-000000000011",
+      "name": "Technical AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "model": "llama3.2",
+        "options": {}
+      },
+      "id": "b2000001-0001-4001-8001-000000000012",
+      "name": "Ollama Chat (Agent)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [1180, 500],
+      "credentials": {
+        "ollamaApi": {
+          "id": "OLLAMA_CREDENTIAL_ID",
+          "name": "Ollama Local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolName": "search_technical_docs",
+        "toolDescription": "Search AcmeCloud product documentation for technical troubleshooting, API issues, authentication, deployments, and integrations. Use when the customer has a technical problem.",
+        "qdrantCollection": {
+          "__rl": true,
+          "mode": "id",
+          "value": "support_kb"
+        },
+        "topK": 5,
+        "options": {}
+      },
+      "id": "b2000001-0001-4001-8001-000000000013",
+      "name": "Qdrant RAG Tool",
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
+      "typeVersion": 1.2,
+      "position": [1500, 520],
+      "credentials": {
+        "qdrantApi": {
+          "id": "QDRANT_CREDENTIAL_ID",
+          "name": "Qdrant Local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "nomic-embed-text",
+        "options": {
+          "dimensions": 768
+        }
+      },
+      "id": "b2000001-0001-4001-8001-000000000014",
+      "name": "Embeddings (Agent)",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [1420, 720],
+      "credentials": {
+        "openAiApi": {
+          "id": "OLLAMA_OPENAI_CREDENTIAL_ID",
+          "name": "Ollama OpenAI Compatible"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are AcmeCloud product team support. Write a warm acknowledgment email.\n\nCustomer: {{ $json.customer_name }}\nMessage: {{ $json.message }}\n\nExplain our feature request process, mention they can vote on feedback.acmecloud.example, and that popular requests influence the roadmap. If they asked about Slack, note it is under consideration for Q3.\nOutput only the email body text.",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are a product support specialist for AcmeCloud."
+            }
+          ]
+        }
+      },
+      "id": "b2000001-0001-4001-8001-000000000015",
+      "name": "Feature Response",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [1340, 520]
+    },
+    {
+      "parameters": {
+        "model": "llama3.2",
+        "options": {}
+      },
+      "id": "b2000001-0001-4001-8001-000000000016",
+      "name": "Ollama Chat (Feature)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [1180, 720],
+      "credentials": {
+        "ollamaApi": {
+          "id": "OLLAMA_CREDENTIAL_ID",
+          "name": "Ollama Local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "escalation-body",
+              "name": "response_body",
+              "value": "=Hi {{ $json.customer_name }},\n\nThank you for contacting AcmeCloud support. Your inquiry requires review by a specialist on our team.\n\nWe have logged your request and a human agent will follow up within 24 business hours at {{ $json.customer_email }}.\n\nBest regards,\nAcmeCloud Support Team",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "b2000001-0001-4001-8001-000000000017",
+      "name": "Escalation Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1340, 740]
+    },
+    {
+      "parameters": {
+        "jsCode": "const routeData = $('Parse Intent').first().json;\nconst agentItem = $input.first().json;\nconst response_body = agentItem.output || agentItem.text || agentItem.response || JSON.stringify(agentItem);\n\nlet rag_sources = [];\ntry {\n  if (agentItem.sourceDocuments) rag_sources = agentItem.sourceDocuments;\n  else if (agentItem.intermediateSteps) {\n    rag_sources = agentItem.intermediateSteps\n      .filter(s => s.action?.tool)\n      .map(s => ({ tool: s.action.tool, observation: String(s.observation || '').slice(0, 500) }));\n  }\n} catch (e) {}\n\nreturn [{\n  json: {\n    ...routeData,\n    response_body: typeof response_body === 'string' ? response_body : JSON.stringify(response_body),\n    rag_sources\n  }\n}];"
+      },
+      "id": "b2000001-0001-4001-8001-000000000018",
+      "name": "Format Billing",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 80]
+    },
+    {
+      "parameters": {
+        "jsCode": "const routeData = $('Parse Intent').first().json;\nconst agentItem = $input.first().json;\nconst response_body = agentItem.output || agentItem.text || agentItem.response || JSON.stringify(agentItem);\n\nlet rag_sources = [];\ntry {\n  if (agentItem.sourceDocuments) rag_sources = agentItem.sourceDocuments;\n  else if (agentItem.intermediateSteps) {\n    rag_sources = agentItem.intermediateSteps\n      .filter(s => s.action?.tool)\n      .map(s => ({ tool: s.action.tool, observation: String(s.observation || '').slice(0, 500) }));\n  }\n} catch (e) {}\n\nreturn [{\n  json: {\n    ...routeData,\n    response_body: typeof response_body === 'string' ? response_body : JSON.stringify(response_body),\n    rag_sources\n  }\n}];"
+      },
+      "id": "b2000001-0001-4001-8001-000000000019",
+      "name": "Format Technical",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const routeData = $('Parse Intent').first().json;\nconst llmItem = $input.first().json;\nconst response_body = llmItem.text || llmItem.output || llmItem.response_body || String(llmItem);\n\nreturn [{\n  json: {\n    ...routeData,\n    response_body: typeof response_body === 'string' ? response_body : JSON.stringify(response_body),\n    rag_sources: []\n  }\n}];"
+      },
+      "id": "b2000001-0001-4001-8001-000000000020",
+      "name": "Format Feature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 520]
+    },
+    {
+      "parameters": {
+        "jsCode": "const routeData = $('Parse Intent').first().json;\nconst item = $input.first().json;\nreturn [{\n  json: {\n    ...routeData,\n    response_body: item.response_body,\n    rag_sources: [],\n    status: 'escalated'\n  }\n}];"
+      },
+      "id": "b2000001-0001-4001-8001-000000000021",
+      "name": "Format Escalation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 740]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst startedAt = item._startedAt || Date.now();\nconst processing_ms = Date.now() - startedAt;\nconst status = item.status || (item.intent === 'unknown' ? 'escalated' : 'sent');\n\nconst response_body = item.response_body || '';\nconst customer_name = item.customer_name || 'Customer';\nconst rag_sources = item.rag_sources || [];\n\nlet sourcesHtml = '';\nif (rag_sources.length > 0) {\n  sourcesHtml = '<p style=\"font-size:12px;color:#666;margin-top:16px;\"><strong>Sources consulted:</strong> Knowledge base search</p>';\n}\n\nconst response_html = `<!DOCTYPE html>\n<html>\n<body style=\"font-family: Arial, sans-serif; line-height: 1.6; color: #333;\">\n  <p>Hi ${customer_name},</p>\n  <div>${response_body.replace(/\\n/g, '<br>')}</div>\n  ${sourcesHtml}\n  <hr style=\"border: none; border-top: 1px solid #eee; margin: 24px 0;\">\n  <p style=\"font-size: 12px; color: #888;\">AcmeCloud Support &bull; Intent: ${item.intent} &bull; Confidence: ${item.intent_confidence || 'n/a'} &bull; Ref: ${item.customer_email}</p>\n</body>\n</html>`;\n\nreturn [{\n  json: {\n    ...item,\n    response_html,\n    processing_ms,\n    status,\n    email_subject: `Re: ${item.subject}`,\n    rag_sources_json: JSON.stringify(rag_sources)\n  }\n}];"
+      },
+      "id": "b2000001-0001-4001-8001-000000000023",
+      "name": "Build Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 400]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.customer_email }}",
+        "subject": "={{ $json.email_subject }}",
+        "emailType": "html",
+        "message": "={{ $json.response_html }}",
+        "options": {}
+      },
+      "id": "b2000001-0001-4001-8001-000000000024",
+      "name": "Gmail Send",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [2000, 400],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "GMAIL_CREDENTIAL_ID",
+          "name": "Gmail OAuth2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const email = $('Build Email').first().json;\nconst gmail = $input.first().json;\nconst gmailOk = !!(gmail.id || gmail.messageId || gmail.threadId);\n\nreturn [{\n  json: {\n    ...email,\n    gmail_message_id: gmail.id || gmail.messageId || '',\n    status: gmailOk ? email.status : 'failed',\n    error_message: gmailOk ? null : (gmail.errorMessage || gmail.message || 'Gmail send failed')\n  }\n}];"
+      },
+      "id": "b2000001-0001-4001-8001-000000000030",
+      "name": "Check Gmail Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2110, 400]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "support_interactions"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "customer_name": "={{ $json.customer_name }}",
+            "customer_email": "={{ $json.customer_email }}",
+            "subject": "={{ $json.subject }}",
+            "message": "={{ $json.message }}",
+            "intent": "={{ $json.intent }}",
+            "intent_confidence": "={{ $json.intent_confidence }}",
+            "response_body": "={{ $json.response_body }}",
+            "response_html": "={{ $json.response_html }}",
+            "rag_sources": "={{ $json.rag_sources_json }}",
+            "gmail_message_id": "={{ $json.gmail_message_id }}",
+            "status": "={{ $json.status }}",
+            "error_message": "={{ $json.error_message }}",
+            "processing_ms": "={{ $json.processing_ms }}"
+          }
+        },
+        "options": {
+          "returnFields": ["id", "created_at", "status", "intent"]
+        }
+      },
+      "id": "b2000001-0001-4001-8001-000000000025",
+      "name": "Log to Postgres",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [2220, 400],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Support Agent Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: $('Check Gmail Status').item.json.status || 'sent', intent: $('Check Gmail Status').item.json.intent, intent_confidence: $('Check Gmail Status').item.json.intent_confidence, interaction_id: $json.id, customer_email: $('Check Gmail Status').item.json.customer_email, processing_ms: $('Check Gmail Status').item.json.processing_ms, gmail_message_id: $('Check Gmail Status').item.json.gmail_message_id, message: $('Check Gmail Status').item.json.status === 'failed' ? 'Response logged but email failed' : 'Support response sent successfully' }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "b2000001-0001-4001-8001-000000000026",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2660, 400]
+    },
+    {
+      "parameters": {
+        "content": "## Autonomous Support Agent\n\n**Webhook:** POST /webhook/support-inquiry\n\n**Flow:** Validate → Classify intent → Route → Generate response → Gmail → Postgres log\n\n**Before activating:**\n1. Configure all credentials (see README)\n2. Run KB Ingestion workflow\n3. Connect Gmail OAuth2",
+        "height": 320,
+        "width": 380,
+        "color": 4
+      },
+      "id": "b2000001-0001-4001-8001-000000000027",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-40, 80]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Normalize Input", "type": "main", "index": 0 }]]
+    },
+    "Normalize Input": {
+      "main": [[{ "node": "Valid Input?", "type": "main", "index": 0 }]]
+    },
+    "Valid Input?": {
+      "main": [
+        [{ "node": "Classify Intent", "type": "main", "index": 0 }],
+        [{ "node": "Respond Error", "type": "main", "index": 0 }]
+      ]
+    },
+    "Classify Intent": {
+      "main": [[{ "node": "Parse Intent", "type": "main", "index": 0 }]]
+    },
+    "Ollama Chat (Intent)": {
+      "ai_languageModel": [[{ "node": "Classify Intent", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Parse Intent": {
+      "main": [[{ "node": "Route by Intent", "type": "main", "index": 0 }]]
+    },
+    "Route by Intent": {
+      "main": [
+        [{ "node": "Billing AI Agent", "type": "main", "index": 0 }],
+        [{ "node": "Technical AI Agent", "type": "main", "index": 0 }],
+        [{ "node": "Feature Response", "type": "main", "index": 0 }],
+        [{ "node": "Escalation Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Billing AI Agent": {
+      "main": [[{ "node": "Format Billing", "type": "main", "index": 0 }]]
+    },
+    "Ollama Chat (Billing)": {
+      "ai_languageModel": [[{ "node": "Billing AI Agent", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Qdrant Billing RAG": {
+      "ai_tool": [[{ "node": "Billing AI Agent", "type": "ai_tool", "index": 0 }]]
+    },
+    "Embeddings (Billing)": {
+      "ai_embedding": [[{ "node": "Qdrant Billing RAG", "type": "ai_embedding", "index": 0 }]]
+    },
+    "Technical AI Agent": {
+      "main": [[{ "node": "Format Technical", "type": "main", "index": 0 }]]
+    },
+    "Ollama Chat (Agent)": {
+      "ai_languageModel": [[{ "node": "Technical AI Agent", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Qdrant RAG Tool": {
+      "ai_tool": [[{ "node": "Technical AI Agent", "type": "ai_tool", "index": 0 }]]
+    },
+    "Embeddings (Agent)": {
+      "ai_embedding": [[{ "node": "Qdrant RAG Tool", "type": "ai_embedding", "index": 0 }]]
+    },
+    "Feature Response": {
+      "main": [[{ "node": "Format Feature", "type": "main", "index": 0 }]]
+    },
+    "Ollama Chat (Feature)": {
+      "ai_languageModel": [[{ "node": "Feature Response", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Escalation Response": {
+      "main": [[{ "node": "Format Escalation", "type": "main", "index": 0 }]]
+    },
+    "Format Billing": {
+      "main": [[{ "node": "Build Email", "type": "main", "index": 0 }]]
+    },
+    "Format Technical": {
+      "main": [[{ "node": "Build Email", "type": "main", "index": 0 }]]
+    },
+    "Format Feature": {
+      "main": [[{ "node": "Build Email", "type": "main", "index": 0 }]]
+    },
+    "Format Escalation": {
+      "main": [[{ "node": "Build Email", "type": "main", "index": 0 }]]
+    },
+    "Build Email": {
+      "main": [[{ "node": "Gmail Send", "type": "main", "index": 0 }]]
+    },
+    "Gmail Send": {
+      "main": [[{ "node": "Check Gmail Status", "type": "main", "index": 0 }]]
+    },
+    "Check Gmail Status": {
+      "main": [[{ "node": "Log to Postgres", "type": "main", "index": 0 }]]
+    },
+    "Log to Postgres": {
+      "main": [[{ "node": "Respond Success", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "pinData": {}
+}

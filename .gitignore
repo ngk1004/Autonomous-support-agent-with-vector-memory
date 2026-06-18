@@ -1,0 +1,7 @@
+.env
+.DS_Store
+*.log
+n8n_storage/
+postgres_data/
+qdrant_data/
+ollama_data/

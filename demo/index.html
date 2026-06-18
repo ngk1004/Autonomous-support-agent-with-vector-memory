@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AcmeCloud Support — Demo Inquiry Form</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --surface: #1a2332;
+      --border: #2d3a4f;
+      --text: #e7ecf3;
+      --muted: #8b9cb3;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --success: #22c55e;
+      --error: #ef4444;
+      --billing: #f59e0b;
+      --technical: #06b6d4;
+      --feature: #a855f7;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+    }
+    header {
+      margin-bottom: 2rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    header h1 { font-size: 1.5rem; font-weight: 600; }
+    header p { color: var(--muted); margin-top: 0.5rem; font-size: 0.95rem; }
+    .badge {
+      display: inline-block;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 0.75rem;
+    }
+    .presets {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+    @media (max-width: 600px) {
+      .presets { grid-template-columns: 1fr; }
+    }
+    .preset-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      cursor: pointer;
+      text-align: left;
+      color: var(--text);
+      transition: border-color 0.15s, transform 0.1s;
+    }
+    .preset-btn:hover { border-color: var(--accent); transform: translateY(-1px); }
+    .preset-btn.billing { border-left: 3px solid var(--billing); }
+    .preset-btn.technical { border-left: 3px solid var(--technical); }
+    .preset-btn.feature { border-left: 3px solid var(--feature); }
+    .preset-btn strong { display: block; font-size: 0.85rem; margin-bottom: 0.25rem; }
+    .preset-btn span { font-size: 0.75rem; color: var(--muted); }
+    form {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+    .field { margin-bottom: 1rem; }
+    label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--muted);
+      margin-bottom: 0.35rem;
+    }
+    input, textarea {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.65rem 0.75rem;
+      color: var(--text);
+      font-size: 0.95rem;
+      font-family: inherit;
+    }
+    input:focus, textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    textarea { min-height: 120px; resize: vertical; }
+    .actions {
+      display: flex;
+      gap: 0.75rem;
+      margin-top: 1.25rem;
+    }
+    button[type="submit"] {
+      flex: 1;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 0.75rem 1.5rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    button[type="submit"]:hover:not(:disabled) { background: var(--accent-hover); }
+    button[type="submit"]:disabled { opacity: 0.6; cursor: not-allowed; }
+    #response-panel {
+      margin-top: 1.5rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      display: none;
+    }
+    #response-panel.visible { display: block; }
+    #response-panel h3 { font-size: 0.9rem; margin-bottom: 0.75rem; }
+    #response-panel.success h3 { color: var(--success); }
+    #response-panel.error h3 { color: var(--error); }
+    pre {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1rem;
+      font-size: 0.8rem;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .loading {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 0.5rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    footer {
+      margin-top: 2rem;
+      text-align: center;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>AcmeCloud Customer Support</h1>
+      <p>Submit an inquiry to trigger the autonomous support agent workflow in n8n.</p>
+      <span class="badge">Powered by n8n + Ollama + Qdrant RAG</span>
+    </header>
+
+    <div class="presets">
+      <button type="button" class="preset-btn billing" data-preset="billing">
+        <strong>Billing</strong>
+        <span>Duplicate charge scenario</span>
+      </button>
+      <button type="button" class="preset-btn technical" data-preset="technical">
+        <strong>Technical Support</strong>
+        <span>API 401 error scenario</span>
+      </button>
+      <button type="button" class="preset-btn feature" data-preset="feature">
+        <strong>Feature Request</strong>
+        <span>Slack integration ask</span>
+      </button>
+    </div>
+
+    <form id="inquiry-form">
+      <div class="field">
+        <label for="customer_name">Name</label>
+        <input type="text" id="customer_name" name="customer_name" placeholder="Jane Smith" required>
+      </div>
+      <div class="field">
+        <label for="customer_email">Email</label>
+        <input type="email" id="customer_email" name="customer_email" placeholder="jane@example.com" required>
+      </div>
+      <div class="field">
+        <label for="subject">Subject</label>
+        <input type="text" id="subject" name="subject" placeholder="Support inquiry" required>
+      </div>
+      <div class="field">
+        <label for="message">Message</label>
+        <textarea id="message" name="message" placeholder="Describe your issue..." required></textarea>
+      </div>
+      <div class="actions">
+        <button type="submit" id="submit-btn">Send Inquiry</button>
+      </div>
+    </form>
+
+    <div id="response-panel">
+      <h3 id="response-title">Response</h3>
+      <pre id="response-body"></pre>
+    </div>
+
+    <footer>
+      Autonomous Support Agent with Vector Memory — n8n demo project
+    </footer>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const PRESETS = {
+      billing: {
+        customer_name: "Jane Smith",
+        customer_email: "jane.smith@example.com",
+        subject: "Duplicate charge on my account",
+        message: "Hi, I was charged twice for my Pro plan this month — once on June 1 and again on June 3. Both charges are $99. Can you please refund the duplicate? My invoice IDs are INV-2025-0612 and INV-2025-0614."
+      },
+      technical: {
+        customer_name: "Alex Chen",
+        customer_email: "alex.chen@devcorp.io",
+        subject: "API returns 401 Unauthorized",
+        message: "Our production integration started failing yesterday. Every API call returns 401 with error invalid_api_key. We haven't changed anything on our end. The key prefix is sk_live_ and we use Bearer auth. Can you help troubleshoot?"
+      },
+      feature: {
+        customer_name: "Morgan Lee",
+        customer_email: "morgan@startup.co",
+        subject: "Slack integration request",
+        message: "Hi team — we'd love native Slack integration for deployment notifications and a /acmecloud slash command. Is this on your roadmap? We're on the Pro plan with 20 team members. Happy to join a beta if available."
+      }
+    };
+
+    document.querySelectorAll(".preset-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const preset = PRESETS[btn.dataset.preset];
+        if (!preset) return;
+        Object.entries(preset).forEach(([key, value]) => {
+          const el = document.getElementById(key);
+          if (el) el.value = value;
+        });
+      });
+    });
+
+    const form = document.getElementById("inquiry-form");
+    const submitBtn = document.getElementById("submit-btn");
+    const responsePanel = document.getElementById("response-panel");
+    const responseTitle = document.getElementById("response-title");
+    const responseBody = document.getElementById("response-body");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const config = window.DEMO_CONFIG || {};
+      const payload = {
+        customer_name: document.getElementById("customer_name").value,
+        customer_email: document.getElementById("customer_email").value,
+        subject: document.getElementById("subject").value,
+        message: document.getElementById("message").value
+      };
+
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span class="loading"></span>Processing...';
+      responsePanel.classList.remove("visible", "success", "error");
+
+      try {
+        const headers = { "Content-Type": "application/json" };
+        if (config.webhookToken) {
+          headers["X-Webhook-Token"] = config.webhookToken;
+        }
+
+        const res = await fetch(config.webhookUrl, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(payload)
+        });
+
+        const text = await res.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = { raw: text };
+        }
+        responsePanel.classList.add("visible");
+        responseBody.textContent = JSON.stringify(data, null, 2);
+
+        if (res.ok) {
+          responsePanel.classList.add("success");
+          responseTitle.textContent = `Success (${data.intent || "processed"}) — check Gmail & Postgres`;
+        } else {
+          responsePanel.classList.add("error");
+          responseTitle.textContent = `Error ${res.status}`;
+        }
+      } catch (err) {
+        responsePanel.classList.add("visible", "error");
+        responseTitle.textContent = "Request Failed";
+        responseBody.textContent = err.message + "\n\nIs n8n running? Is the Support Agent workflow active?";
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Send Inquiry";
+      }
+    });
+  </script>
+</body>
+</html>
