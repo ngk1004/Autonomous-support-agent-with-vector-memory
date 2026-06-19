@@ -1,7 +1,16 @@
-.PHONY: setup up down logs verify prewarm demo serve ingest psql
+.PHONY: guide help setup setup-interactive up down logs verify prewarm demo prove serve ingest psql
+
+guide:
+	./scripts/guide.sh
+
+help:
+	./scripts/help.sh
 
 setup:
 	./scripts/setup.sh
+
+setup-interactive:
+	./scripts/interactive-setup.sh
 
 up:
 	docker compose --profile cpu up -d
@@ -15,10 +24,16 @@ logs:
 verify:
 	./scripts/verify-stack.sh
 
+prove:
+	./scripts/demo-proof.sh
+
 prewarm:
 	./scripts/prewarm-demo.sh
 
 demo:
+	./scripts/serve-demo.sh
+
+serve:
 	./scripts/serve-demo.sh
 
 ingest:
