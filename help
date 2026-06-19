@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Interactive help — commands, troubleshooting, architecture, demo tips
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+exec "$ROOT/scripts/help.sh" "$@"

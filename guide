@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Convenience entry point — run the interactive guide from project root.
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+exec "$ROOT/scripts/guide.sh" "$@"

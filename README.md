@@ -1,270 +1,231 @@
+```
+       ___         _                         _
+      / _ \       | |                       | |
+     / /_\ \ _   _| |_ ___  _ __   ___ _ __ | |_
+     |  _  || | | | __/ _ \| '_ \ / _ \ '_ \| __|
+     | | | || |_| | || (_) | | | |  __/ | | | |_
+     \_| |_/ \__,_|\__\___/|_| |_|\___|_| |_|\__|
+
+  * AUTONOMOUS SUPPORT AGENT  with  VECTOR MEMORY
+    n8n  +  Ollama  +  Qdrant  +  Postgres  +  Gmail
+```
+
 # Autonomous Support Agent with Vector Memory
 
-An end-to-end **n8n** demonstration of agentic customer support: webhook intake, LLM intent routing, RAG-powered technical responses, Gmail delivery, and PostgreSQL audit logging — all running locally with **Ollama** and **Qdrant**.
+A **local, demo ready customer support automation** built with n8n. A customer submits an inquiry, AI classifies the intent, searches a knowledge base for answers, sends a Gmail reply, and logs everything to PostgreSQL. No cloud AI bills required.
 
-## What This Demonstrates
+Perfect for portfolios, client demos, and learning how agentic workflows actually work.
 
-- **Intent routing** — LLM classifies inquiries (Billing / Technical / Feature Request) and branches via Switch node
-- **Agentic RAG** — AI Agent searches a vector knowledge base for technical **and billing** support answers
-- **Multi-system orchestration** — n8n coordinates Ollama, Qdrant, Gmail, and PostgreSQL in one workflow
-- **Production patterns** — validation, audit logging, HTML email, webhook auth, error paths
+## What is this?
 
-## Architecture
+Imagine a support team that never sleeps:
 
-```mermaid
-flowchart TB
-  subgraph client [Demo Layer]
-    Form[demo/index.html]
-  end
+1. A customer fills out a support form (or sends a simulated email)
+2. AI reads the message and decides: **Billing**, **Technical Support**, or **Feature Request**
+3. For technical and billing questions, an **AI agent searches your documentation** (vector memory / RAG) before answering
+4. A professional email reply is sent via **Gmail**
+5. The full interaction is saved in **PostgreSQL** for audit and reporting
 
-  subgraph n8n [n8n Workflows]
-    WH[Webhook]
-    Intent[Intent Classifier]
-    Switch[Switch Node]
-    Billing[Billing LLM]
-    Tech[AI Agent + RAG]
-    Feature[Feature LLM]
-    Gmail[Gmail Send]
-    PG[Postgres Log]
-  end
+All of this runs on your machine using **n8n**, **Ollama** (local AI), and **Qdrant** (vector search). No OpenAI API key needed.
 
-  subgraph infra [Docker Stack]
-    Ollama[Ollama]
-    Qdrant[Qdrant]
-    Postgres[(PostgreSQL)]
-  end
+## Use cases
 
-  Form --> WH --> Intent --> Switch
-  Switch --> Billing
-  Switch --> Tech
-  Switch --> Feature
-  Billing --> Gmail
-  Tech --> Gmail
-  Feature --> Gmail
-  Gmail --> PG
-  Intent --> Ollama
-  Tech --> Ollama
-  Tech --> Qdrant
-  PG --> Postgres
-```
+| Who it's for | What you can show |
+|--------------|-------------------|
+| **Portfolio / job interviews** | End to end agentic AI: routing, RAG, email, and logging |
+| **Client demos** | Automate support intake and knowledge retrieval with a live system |
+| **Learning n8n + AI** | Real workflows: webhooks, Switch nodes, AI Agent, vector stores |
+| **Internal knowledge retrieval** | Swap in your own docs and use it as an internal support bot |
 
-## Tech Stack
+**Example scenarios in the demo:**
 
-| Component | Role |
-|-----------|------|
-| [n8n](https://n8n.io/) | Workflow orchestration |
-| [Ollama](https://ollama.com/) | Local LLM (`llama3.2`) + embeddings (`nomic-embed-text`) |
-| [Qdrant](https://qdrant.tech/) | Vector store for RAG |
-| [PostgreSQL](https://www.postgresql.org/) + pgvector | n8n persistence + interaction audit log |
-| Gmail OAuth2 | Outbound email delivery |
+| Scenario | What happens |
+|----------|--------------|
+| *"I was charged twice this month"* | Billing branch + billing policy search |
+| *"My API key returns 401"* | Technical branch + AI agent searches docs |
+| *"Can you add Slack integration?"* | Feature request branch + roadmap response |
 
-## Quick Start
+## What you need
 
-### 1. Clone and configure
+| Requirement | Notes |
+|-------------|-------|
+| **Docker Desktop** | [docker.com](https://www.docker.com/products/docker-desktop/) |
+| **Python 3** | Usually pre installed on Mac |
+| **Gmail account** | For sending demo replies (one time OAuth in n8n) |
+| **First run** | ~30 to 45 min, mostly AI model download |
+| **After setup** | ~5 to 10 min to start and demo again |
+
+## Run it yourself
+
+### Step 1: Clone the repo
 
 ```bash
-cd "Autonomous Support Agent with Vector Memory"
-cp .env.example .env
-# Edit .env — set POSTGRES_PASSWORD and secrets
+git clone https://github.com/ngk1004/Autonomous-support-agent-with-vector-memory.git
+cd Autonomous-support-agent-with-vector-memory
+chmod +x guide help scripts/*.sh
 ```
 
-### 2. Start the stack
+### Step 2: Run the interactive guide
+
+```
+     __  __
+    |  \/  | ___ _ __  _   _
+    | |\/| |/ _ \ '_ \| | | |
+    | |  | |  __/ | | | |_| |
+    |_|  |_|\___|_| |_|\__,_|
+
+     ./guide   interactive setup walkthrough
+```
 
 ```bash
-chmod +x scripts/*.sh
-./scripts/setup.sh
+./guide
 ```
 
-First boot pulls Ollama models (~5–15 min on CPU). Monitor progress:
+The guide walks you through **every step** in the terminal, like a pairing session:
+
+1. Creates your config (`.env`, secrets, demo form)
+2. Starts Docker (n8n, Postgres, Qdrant, Ollama)
+3. Waits for AI models to download
+4. Tells you exactly what to click in n8n
+5. Helps you connect Gmail
+6. Runs a proof test when you're done
+
+Follow the prompts and press Enter when each step is complete.
+
+### Step 3: Stuck? Run help
+
+```
+      _   _      _ _     
+     | | | | ___| | | ___
+     | |_| |/ _ \ | |/ _ \
+     |  _  |  __/ | | (_) |
+     |_| |_|\___|_|_|\___/
+
+     ./help   interactive help center
+```
 
 ```bash
-docker compose logs -f ollama-init
+./help
 ```
 
-### 3. Configure n8n credentials
+The help menu includes:
 
-Open http://localhost:5678 and create/verify these credentials:
+1. Getting started path
+2. All commands in one place
+3. Troubleshooting (pick your problem, get a fix)
+4. Demo tips for showing someone
+5. Live status check (what's done vs what's missing)
 
-| Credential | Type | Settings |
-|------------|------|----------|
-| **Ollama Local** | Ollama | Base URL: `http://ollama:11434` |
-| **Ollama OpenAI Compatible** | OpenAI | Base URL: `http://ollama:11434/v1`, API Key: `ollama` |
-| **Qdrant Local** | Qdrant | URL: `http://qdrant:6333` |
-| **Support Agent Postgres** | Postgres | Host: `postgres`, DB: `support_agent`, user/pass from `.env` |
-| **Gmail OAuth2** | Gmail | See [docs/gmail-setup.md](docs/gmail-setup.md) |
-
-Template credential files are in `n8n/credentials/` for reference.
-
-### 4. Ingest the knowledge base
-
-1. Open workflow **01 - KB Ingestion**
-2. Assign credentials to **Qdrant Insert** and **Embeddings OpenAI (Ollama)**
-3. Click **Execute Workflow**
-
-Verify:
+**Quick help topics:**
 
 ```bash
-./scripts/trigger-ingestion.sh
+./help commands
+./help troubleshoot
+./help status
+./help demo
 ```
 
-### 5. Activate the support agent
+## Prove it works
 
-1. Open workflow **02 - Support Agent**
-2. Assign all credentials (Ollama, Qdrant, Embeddings, Postgres, Gmail)
-3. **Activate** the workflow (toggle in top-right)
-4. Copy the production webhook URL
+```
+      ____  ____   ___  ____  _____
+     |  _ \|  _ \ / _ \|  _ \| ____|
+     | |_) | |_) | | | | | | |  _|
+     |  __/|  __/| |_| | |_| | |___
+     |_|   |_|    \___/|____/|_____|
 
-### 6. Run the demo
+     make prove   does the code work?
+```
 
-Open `demo/index.html` in your browser. Update `demo/config.js` if your webhook URL differs.
-
-Pre-warm before a live demo:
+After finishing the guide:
 
 ```bash
-./scripts/prewarm-demo.sh
-# or: make prewarm
+make prove
 ```
 
-Serve the demo form (avoids browser CORS issues with `file://`):
+This sends a real test inquiry and checks infrastructure, vector store, webhook, and Postgres logging.
+
+**Show someone visually:**
 
 ```bash
-./scripts/serve-demo.sh
-# Open http://localhost:8080/index.html
+make demo
 ```
 
-Verify the full stack:
+Open http://localhost:8080, click a preset, and submit.
 
-```bash
-./scripts/verify-stack.sh
-# or: make verify
-```
+Then open:
 
-See [docs/demo-checklist.md](docs/demo-checklist.md) for a live demo runbook.
-See [docs/credentials-setup.md](docs/credentials-setup.md) for credential wiring.
-
-
-## Demo SQL Queries
-
-```sql
--- Recent interactions
-SELECT customer_email, intent, status, processing_ms, created_at
-FROM support_interactions
-ORDER BY created_at DESC
-LIMIT 10;
-
--- Interactions by intent today
-SELECT intent, COUNT(*) AS count
-FROM support_interactions
-WHERE created_at >= CURRENT_DATE
-GROUP BY intent;
-
--- Average response time by intent
-SELECT intent, ROUND(AVG(processing_ms)) AS avg_ms
-FROM support_interactions
-GROUP BY intent;
-
--- Technical inquiries with RAG sources
-SELECT customer_email, subject, rag_sources, created_at
-FROM support_interactions
-WHERE intent = 'technical'
-ORDER BY created_at DESC
-LIMIT 5;
-```
-
-Connect to Postgres:
-
-```bash
-docker compose exec postgres psql -U support_agent -d support_agent
-```
-
-## Project Structure
+1. **n8n** at http://localhost:5678 (Executions tab shows AI branching live)
+2. **Gmail** for the automated reply in your inbox
 
 ```
-├── docker-compose.yml       # n8n + Postgres + Qdrant + Ollama
-├── db/init.sql              # support_interactions schema
-├── knowledge-base/          # 15 mock support articles
-├── workflows/
-│   ├── 01-kb-ingestion.json
-│   └── 02-support-agent.json
-├── demo/
-│   ├── index.html           # Live demo form
-│   ├── config.js
-│   └── sample-payloads.json
-├── scripts/
-│   ├── setup.sh
-│   ├── trigger-ingestion.sh
-│   └── prewarm-demo.sh
-└── docs/
-    └── gmail-setup.md
+      ____ ___  __  __ ____   ___  _   _  ____
+     / ___/ _ \|  \/  |  _ \ / _ \| | | |/ ___|
+     | |  | | | | |\/| | |_) | | | | | | | |
+     | |__| |_| | |  | |  __/| |_| | |_| | |___
+     \____\___/|_|  |_|_|    \___/ \___/ \____|
+
+     You're ready to demo this project.
 ```
 
-## Workflows
+## How it works
 
-### 01 - KB Ingestion
-
-Reads markdown from `/data/knowledge-base`, chunks text, embeds via Ollama (`nomic-embed-text`, 768 dimensions), inserts into Qdrant collection `support_kb`.
-
-**Run once** after stack startup.
-
-### 02 - Support Agent
-
-| Stage | Nodes |
-|-------|-------|
-| Intake | Webhook → Normalize → Validate |
-| Routing | Classify Intent (Ollama) → Parse (with confidence threshold) → Switch |
-| Billing | **AI Agent** + Qdrant billing RAG tool |
-| Technical | **AI Agent** + Qdrant technical RAG tool |
-| Feature | LLM chain → format response |
-| Unknown | Escalation template (low confidence or unclassified) |
-| Delivery | Build Email → Gmail → Check Status → Postgres → Respond |
-
-### 03 - Error Handler
-
-Logs workflow failures to `support_interactions`. Link as the error workflow in **02 - Support Agent** settings.
-
-## curl Examples
-
-```bash
-# Technical (triggers RAG agent)
-curl -X POST http://localhost:5678/webhook/support-inquiry \
-  -H 'Content-Type: application/json' \
-  -H 'X-Webhook-Token: demo_webhook_token_change_me' \
-  -d '{"customer_name":"Alex","customer_email":"you@gmail.com","subject":"API 401","message":"API returns 401 invalid_api_key with Bearer auth"}'
+```
+  Customer form
+       |
+       v
+    Webhook
+       |
+       v
+  AI classifies intent
+       |
+       +--------+----------+----------+
+       |        |          |          |
+       v        v          v          v
+   Billing   Technical  Feature    Unknown
+   agent     agent      request    escalate
+   + RAG     + RAG
+       |        |          |
+       +--------+----------+
+                |
+                v
+          Gmail reply sent
+                |
+                v
+        Logged to PostgreSQL
 ```
 
-More examples in `demo/sample-payloads.json`.
+**Built with:** [n8n](https://n8n.io/) · [Ollama](https://ollama.com/) · [Qdrant](https://qdrant.tech/) · PostgreSQL · Gmail
 
-## Mac: Native Ollama (Faster Demos)
+## Useful commands
 
-For faster inference during live demos, run Ollama natively on macOS:
+| Command | What it does |
+|---------|--------------|
+| `./guide` | Interactive setup walkthrough |
+| `./help` | Interactive help menu |
+| `make prove` | Test everything end to end |
+| `make demo` | Start the demo web form |
+| `make verify` | Health check all services |
+| `make prewarm` | Warm AI models before a live demo |
+| `make up` | Start Docker stack |
+| `make down` | Stop Docker stack |
 
-1. Install Ollama from https://ollama.com
-2. `ollama pull llama3.2 && ollama pull nomic-embed-text`
-3. In `.env`: `OLLAMA_HOST=host.docker.internal:11434`
-4. Restart n8n: `docker compose --profile cpu up -d n8n`
+## Documentation
 
-## Troubleshooting
+| Doc | When you need it |
+|-----|------------------|
+| [docs/credentials-setup.md](docs/credentials-setup.md) | Wiring n8n credentials |
+| [docs/gmail-setup.md](docs/gmail-setup.md) | Gmail OAuth one time setup |
+| [docs/demo-checklist.md](docs/demo-checklist.md) | Day of demo prep |
 
-| Problem | Solution |
-|---------|----------|
-| Ollama models not ready | `docker compose logs ollama-init` — wait for pull to finish |
-| Embedding errors / 400 | Use **Embeddings OpenAI** node (not Embeddings Ollama) with `dimensions: 768` |
-| Empty RAG results | Run KB Ingestion workflow; verify `support_kb` collection in Qdrant |
-| Webhook 404 | Activate workflow **02 - Support Agent** |
-| Webhook 401 | Match `X-Webhook-Token` header to `WEBHOOK_AUTH_TOKEN` in `.env` |
-| Gmail fails | Re-auth OAuth — see [docs/gmail-setup.md](docs/gmail-setup.md) |
-| Slow responses on CPU | Run `./scripts/prewarm-demo.sh` before demo; use native Mac Ollama |
-| File read denied | Ensure `N8N_RESTRICT_FILE_ACCESS_TO=/data/knowledge-base` is set |
+## First time vs every time after
 
-## Production Hardening Notes
-
-- Enable webhook authentication (`WEBHOOK_AUTH_TOKEN`)
-- Add rate limiting (reverse proxy or n8n Wait node)
-- Human-in-the-loop escalation for low-confidence intents
-- PII retention policy on `support_interactions`
-- Use managed Qdrant/Pinecone for production scale
-- Replace Gmail with SendGrid/SES for transactional volume
+| | First run | After setup |
+|---|-----------|-------------|
+| **Time** | ~30 to 45 min | ~5 to 10 min |
+| **You do** | `./guide` + n8n UI steps | `make up` then `make prewarm` then `make demo` |
+| **Main wait** | Ollama downloading models | None |
 
 ## License
 
-MIT — use freely for portfolio demos and client presentations.
+MIT. Use freely for portfolios, demos, and learning.
